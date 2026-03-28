@@ -9,6 +9,7 @@ import { generateNexus, validateNexusCode } from './generator.js'
 import { parseNexus } from './parser.js'
 import { validateAST, ValidationError } from './validator.js'
 import { migrate } from './migrate.js'
+import { generateOpenAPISpec, getSwaggerHTML } from './swagger.js'
 
 const IS_DEV = process.env.NODE_ENV !== 'production'
 
@@ -136,6 +137,17 @@ export function startServer(intentMap, authMap, ast, db) {
     }
   })
 
+  // ──────── SWAGGER DOCS ────────
+  app.get('/docs', async (req, reply) => {
+    const spec = generateOpenAPISpec(ast, port)
+    reply.type('text/html')
+    return getSwaggerHTML(spec)
+  })
+
+  app.get('/docs/json', async (req, reply) => {
+    return generateOpenAPISpec(ast, port)
+  })
+
   // ──────── DASHBOARD ────────
   if (IS_DEV) {
     app.get('/_nexus', async (req, reply) => {
@@ -211,6 +223,7 @@ export function startServer(intentMap, authMap, ast, db) {
   if (IS_DEV) {
     console.log(`[nexus] dashboard em http://localhost:${port}/_nexus`)
     console.log(`[nexus] studio em http://localhost:${port}/_studio`)
+    console.log(`[nexus] docs/swagger em http://localhost:${port}/docs`)
   } else {
     console.log('[nexus] modo produção — dashboard e /intents desabilitados')
   }
