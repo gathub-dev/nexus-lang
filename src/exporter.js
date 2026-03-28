@@ -14,19 +14,17 @@ const __dirname = path.dirname(__filename)
 /**
  * Source files that make up the nexus-lang runtime
  */
+// Files to copy as-is (no studio/generator/exporter dependencies)
 const SRC_FILES = [
   'parser.js',
   'validator.js',
   'engine.js',
-  'server.js',
   'migrate.js',
   'auth.js',
   'query.js',
   'sandbox.js',
-  'watcher.js',
   'dashboard.js',
   'swagger.js',
-  'index.js',
 ]
 
 /**
@@ -167,7 +165,7 @@ Gerado com [Nexus Language](https://github.com/gathub-dev/nexus-lang)
       archive.file(binPath, { name: `${safeName}/bin/nexus.js`, mode: 0o755 })
     }
 
-    // ── src/ files ── (copy all runtime source files)
+    // ── src/ files that can be copied as-is ──
     for (const file of SRC_FILES) {
       const filePath = path.resolve(__dirname, file)
       if (fs.existsSync(filePath)) {
@@ -175,6 +173,207 @@ Gerado com [Nexus Language](https://github.com/gathub-dev/nexus-lang)
       }
     }
 
+    // ── src/server.js ── (standalone version without studio/generator)
+    archive.append(STANDALONE_SERVER, { name: `${safeName}/src/server.js` })
+
+    // ── src/index.js ── (standalone version)
+    archive.append(STANDALONE_INDEX, { name: `${safeName}/src/index.js` })
+
+    // ── src/watcher.js ── (copy from source)
+    const watcherPath = path.resolve(__dirname, 'watcher.js')
+    if (fs.existsSync(watcherPath)) {
+      archive.file(watcherPath, { name: `${safeName}/src/watcher.js` })
+    }
+
     archive.finalize()
   })
 }
+
+// ── Standalone server.js (no studio/generator/exporter imports) ──
+const STANDALONE_SERVER = `import Fastify from 'fastify'
+import { enforceAuth, generateToken, AuthError, warnDefaultSecret } from './auth.js'
+import { executeQuery } from './query.js'
+import { getDashboardHTML } from './dashboard.js'
+import { generateOpenAPISpec, getSwaggerHTML } from './swagger.js'
+import { ValidationError } from './validator.js'
+
+const IS_DEV = process.env.NODE_ENV !== 'production'
+
+function createRateLimiter({ max = 60, windowMs = 60_000 } = {}) {
+  const buckets = new Map()
+  setInterval(() => buckets.clear(), windowMs).unref()
+  return function check(ip) {
+    const count = (buckets.get(ip) ?? 0) + 1
+    buckets.set(ip, count)
+    return count <= max
+  }
+}
+
+export function startServer(intentMap, authMap, ast, db) {
+  const app = Fastify({ logger: IS_DEV })
+  const rateLimiter = createRateLimiter({ max: 60, windowMs: 60_000 })
+  const port = parseInt(process.env.PORT ?? '3000')
+
+  warnDefaultSecret()
+
+  app.addHook('onSend', async (req, reply) => {
+    reply.header('X-Content-Type-Options', 'nosniff')
+    reply.header('X-Frame-Options', 'DENY')
+    reply.header('X-XSS-Protection', '1; mode=block')
+    reply.removeHeader('X-Powered-By')
+    reply.removeHeader('Server')
+  })
+
+  app.addHook('preHandler', async (req, reply) => {
+    if (!rateLimiter(req.ip)) {
+      reply.status(429).send({ error: 'Too many requests' })
+    }
+  })
+
+  app.get('/health', async () => ({ ok: true, timestamp: new Date().toISOString() }))
+
+  app.post('/auth/token', async (req, reply) => {
+    try {
+      const { id, role } = req.body ?? {}
+      if (!id) { reply.status(400); return { error: 'Campo "id" obrigatorio' } }
+      return { token: generateToken({ id, role }) }
+    } catch (err) { reply.status(400); return { error: err.message } }
+  })
+
+  if (IS_DEV) {
+    app.get('/intents', async () => ({ intents: Object.keys(intentMap) }))
+  }
+
+  app.post('/intent/:name', async (req, reply) => {
+    const name = req.params.name.replace(/-/g, ' ')
+    if (!/^[a-zA-Z0-9 _-]+$/.test(name)) { reply.status(400); return { error: 'Nome de intent invalido' } }
+    const fn = intentMap[name]
+    if (!fn) { reply.status(404); return { error: 'Intent nao encontrada: ' + name } }
+    try {
+      const rule = authMap?.[name] ?? { type: 'authenticated' }
+      const user = enforceAuth(req, rule)
+      return await fn(req.body ?? {}, user)
+    } catch (err) {
+      if (err instanceof AuthError) { reply.status(err.statusCode); return { error: err.message } }
+      reply.status(400); return { error: IS_DEV ? err.message : 'Erro ao processar requisicao' }
+    }
+  })
+
+  app.post('/query', async (req, reply) => {
+    try {
+      const { q } = req.body ?? {}
+      if (!q) { reply.status(400); return { error: 'Campo "q" obrigatorio' } }
+      return await executeQuery(q, ast, db)
+    } catch (err) { reply.status(400); return { error: IS_DEV ? err.message : 'Erro na query' } }
+  })
+
+  app.get('/query', async (req, reply) => {
+    try {
+      const q = req.query.q
+      if (!q) { reply.status(400); return { error: 'Parametro "q" obrigatorio' } }
+      return await executeQuery(q, ast, db)
+    } catch (err) { reply.status(400); return { error: IS_DEV ? err.message : 'Erro na query' } }
+  })
+
+  app.get('/docs', async (req, reply) => {
+    reply.type('text/html')
+    return getSwaggerHTML(generateOpenAPISpec(ast, port))
+  })
+
+  app.get('/docs/json', async (req, reply) => {
+    return generateOpenAPISpec(ast, port)
+  })
+
+  if (IS_DEV) {
+    app.get('/_nexus', async (req, reply) => {
+      reply.type('text/html')
+      return getDashboardHTML(ast, port)
+    })
+  }
+
+  app.listen({ port, host: '0.0.0.0' })
+  console.log('[nexus] servidor em http://localhost:' + port)
+  console.log('[nexus] docs/swagger em http://localhost:' + port + '/docs')
+  if (IS_DEV) console.log('[nexus] dashboard em http://localhost:' + port + '/_nexus')
+
+  return app
+}
+`
+
+// ── Standalone index.js ──
+const STANDALONE_INDEX = `import fs from 'fs'
+import { parseNexus, ParseError } from './parser.js'
+import { validateAST, ValidationError } from './validator.js'
+import { buildIntentMap } from './engine.js'
+import { migrate } from './migrate.js'
+import { startServer } from './server.js'
+import { getIntentAuthRule } from './auth.js'
+import pkg from 'pg'
+
+const { Client } = pkg
+
+function createEventSystem(events) {
+  const handlers = new Map()
+  for (const ev of events) {
+    handlers.set(ev.name, async ({ saved }) => {
+      for (const action of ev.actions) {
+        if (action.type === 'log') {
+          console.log('[event:' + ev.name + '] ' + action.message, saved?.id ? '-> id=' + saved.id : '')
+        }
+      }
+    })
+  }
+  return {
+    emit: async (name, data) => {
+      const handler = handlers.get(name)
+      if (handler) setImmediate(() => handler(data).catch(console.error))
+    }
+  }
+}
+
+function buildAuthMap(intents) {
+  const map = {}
+  for (const intent of intents) map[intent.name] = getIntentAuthRule(intent)
+  return map
+}
+
+export async function startProduction(nexusFile) {
+  let raw
+  try { raw = fs.readFileSync(nexusFile, 'utf-8') }
+  catch { console.error('[nexus] app.nexus nao encontrado'); process.exit(1) }
+
+  let ast
+  try { ast = parseNexus(raw) }
+  catch (err) {
+    if (err instanceof ParseError) { console.error('[nexus] erro de sintaxe:', err.message); process.exit(1) }
+    throw err
+  }
+
+  try { validateAST(ast) }
+  catch (err) {
+    if (err instanceof ValidationError) { console.error('[nexus] schema invalido:', err.message); process.exit(1) }
+    throw err
+  }
+
+  console.log('[nexus] schema valido — ' + ast.entities.length + ' entidades, ' + ast.intents.length + ' intents')
+
+  const db = new Client({
+    connectionString: process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/nexus'
+  })
+  await db.connect()
+  await migrate(ast, db, { dryRun: false })
+
+  const eventSystem = createEventSystem(ast.events)
+  const intentMap = buildIntentMap(ast.intents, ast.entities, db, eventSystem.emit)
+  const authMap = buildAuthMap(ast.intents)
+
+  startServer(intentMap, authMap, ast, db)
+}
+
+export { parseNexus, ParseError } from './parser.js'
+export { validateAST, ValidationError, sanitizeInput } from './validator.js'
+export { buildIntentMap } from './engine.js'
+export { migrate, diffSchema } from './migrate.js'
+export { generateToken, verifyToken } from './auth.js'
+export { executeQuery, parseQuery } from './query.js'
+`
