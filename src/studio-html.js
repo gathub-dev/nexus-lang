@@ -272,8 +272,8 @@ export function getStudioHTML() {
 <div class="header">
   <span class="logo">NEXUS <span class="logo-sub">Studio</span></span>
   <div class="header-right">
-    <a href="/_nexus" class="btn btn-ghost" id="btnDashboard" style="display:none">Dashboard</a>
-    <button class="btn btn-deploy" id="btnDeploy" disabled onclick="deploy()">Criar Sistema</button>
+    <input type="text" id="projectNameInput" placeholder="nome-do-projeto" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;width:180px;outline:none">
+    <button class="btn btn-deploy" id="btnDeploy" disabled onclick="downloadProject()">Baixar Projeto</button>
   </div>
 </div>
 
@@ -543,31 +543,40 @@ function updateRoutes(code) {
 
 // ---- Deploy ----
 
-async function deploy() {
+async function downloadProject() {
   if (!currentNexusCode) return
+  var projectName = document.getElementById('projectNameInput').value.trim() || 'meu-sistema'
   var overlay = document.getElementById('deployOverlay')
+  document.getElementById('deployTitle').textContent = 'Gerando projeto...'
+  document.getElementById('deployText').textContent = 'Empacotando arquivos para download'
+  document.getElementById('deploySpinner').style.display = 'block'
   overlay.classList.add('show')
   try {
-    var res = await fetch('/_studio/deploy', {
+    var res = await fetch('/_studio/download', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: currentNexusCode })
+      body: JSON.stringify({ code: currentNexusCode, projectName: projectName })
     })
-    var data = await res.json()
-    if (data.ok) {
-      document.getElementById('deployTitle').textContent = 'Sistema criado!'
-      document.getElementById('deployText').textContent = 'Acesse o dashboard para testar.'
-      document.getElementById('deploySpinner').style.display = 'none'
-      document.getElementById('btnDashboard').style.display = 'inline-flex'
-      showToast('Sistema criado com sucesso!', 'success')
-      setTimeout(function() {
-        overlay.classList.remove('show')
-        document.getElementById('deploySpinner').style.display = 'block'
-      }, 2500)
-    } else {
+    if (!res.ok) {
+      var err = await res.json()
       overlay.classList.remove('show')
-      showToast('Erro: ' + (data.error || 'falha no deploy'), 'error')
+      showToast('Erro: ' + (err.error || 'falha ao gerar'), 'error')
+      return
     }
+    var blob = await res.blob()
+    var url = URL.createObjectURL(blob)
+    var a = document.createElement('a')
+    a.href = url
+    a.download = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-') + '.zip'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    document.getElementById('deployTitle').textContent = 'Projeto baixado!'
+    document.getElementById('deployText').textContent = 'Extraia o ZIP, rode npm install e npm run dev'
+    document.getElementById('deploySpinner').style.display = 'none'
+    showToast('Projeto baixado com sucesso!', 'success')
+    setTimeout(function() { overlay.classList.remove('show') }, 2500)
   } catch (err) {
     overlay.classList.remove('show')
     showToast('Erro de conexao', 'error')

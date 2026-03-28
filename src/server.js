@@ -10,6 +10,7 @@ import { parseNexus } from './parser.js'
 import { validateAST, ValidationError } from './validator.js'
 import { migrate } from './migrate.js'
 import { generateOpenAPISpec, getSwaggerHTML } from './swagger.js'
+import { generateProjectZip } from './exporter.js'
 
 const IS_DEV = process.env.NODE_ENV !== 'production'
 
@@ -190,26 +191,26 @@ export function startServer(intentMap, authMap, ast, db) {
       }
     })
 
-    app.post('/_studio/deploy', async (req, reply) => {
-      const { code } = req.body ?? {}
+    app.post('/_studio/download', async (req, reply) => {
+      const { code, projectName } = req.body ?? {}
       if (!code) {
         reply.status(400)
         return { error: 'Campo "code" obrigatorio' }
       }
 
       try {
-        // validate
+        // validate first
         const newAst = parseNexus(code)
         validateAST(newAst)
 
-        // save app.nexus
-        const nexusPath = path.resolve(process.cwd(), 'app.nexus')
-        fs.writeFileSync(nexusPath, code, 'utf-8')
+        // generate ZIP
+        const name = projectName || 'meu-sistema'
+        const safeName = name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-')
+        const zipBuffer = await generateProjectZip(code, safeName)
 
-        // run migrations
-        await migrate(newAst, db, { dryRun: false })
-
-        return { ok: true, message: 'Sistema criado! O servidor vai recarregar automaticamente.' }
+        reply.header('Content-Type', 'application/zip')
+        reply.header('Content-Disposition', `attachment; filename="${safeName}.zip"`)
+        return reply.send(zipBuffer)
       } catch (err) {
         reply.status(400)
         return { error: err.message }
