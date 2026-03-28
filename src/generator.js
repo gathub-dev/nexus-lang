@@ -123,10 +123,13 @@ event AgendamentoCriado:
 - Se o usuario pedir modificacoes, gere o codigo .nexus COMPLETO atualizado (nao parcial)
 - Crie intents logicos para cada entidade (criar, atualizar quando fizer sentido)
 - Sempre adicione eventos relevantes
-- Use authorize public para operacoes abertas (cadastro, login)
+- Use authorize public para operacoes abertas (cadastro)
 - Use authorize role(admin) para operacoes administrativas
 - Sem authorize = requer autenticacao basica (token JWT)
+- NUNCA crie intents de login/autenticacao — o Nexus ja tem POST /auth/token automatico
 - NUNCA use acentos nos nomes de campos
+- Todo intent com save DEVE referenciar uma entidade que existe no schema
+- Intents podem existir sem save (ex: para emit ou log apenas)
 - Sempre gere um sistema COMPLETO e funcional`
 
 /**

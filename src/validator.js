@@ -89,13 +89,6 @@ function validateIntent(intent, entityNames) {
     throw new ValidationError(`Intent "${intent.name}" não tem ações`)
   }
 
-  const hasSave = intent.actions.some(a => a.type === 'save')
-  if (!hasSave) {
-    throw new ValidationError(
-      `Intent "${intent.name}" não tem ação "save" — intents de mutação devem persistir algo`
-    )
-  }
-
   for (const action of intent.actions) {
     if (action.type === 'save' && !entityNames.has(action.entity)) {
       throw new ValidationError(
