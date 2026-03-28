@@ -1,0 +1,44 @@
+# Nexus Language — Exemplo
+# Execute: nexus dev
+
+User:
+  name text required
+  email text unique required
+  role enum(admin, user)
+
+Product:
+  name text required
+  price number required
+  description text
+  active boolean
+
+Order:
+  user -> User required
+  total number required
+  status enum(pending, paid, shipped, delivered)
+
+# Intents
+
+intent create user:
+  authorize public
+  require name, email
+  save User
+  emit UserCreated
+
+intent create product:
+  authorize role(admin)
+  require name, price
+  save Product
+
+intent create order:
+  require user, total
+  save Order
+  emit OrderCreated
+
+# Eventos
+
+event UserCreated:
+  log "novo usuario criado"
+
+event OrderCreated:
+  log "novo pedido criado"

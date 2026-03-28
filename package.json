@@ -1,0 +1,42 @@
+{
+  "name": "nexus-lang",
+  "version": "0.1.0",
+  "description": "Backend orientado a intenção. Descreva seu sistema, o Nexus constrói.",
+  "type": "module",
+  "bin": {
+    "nexus": "./bin/nexus.js"
+  },
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./parser": "./src/parser.js",
+    "./validator": "./src/validator.js",
+    "./engine": "./src/engine.js",
+    "./migrate": "./src/migrate.js"
+  },
+  "scripts": {
+    "dev": "node bin/nexus.js dev",
+    "start": "node bin/nexus.js start",
+    "migrate": "node bin/nexus.js migrate",
+    "check": "node bin/nexus.js check"
+  },
+  "keywords": [
+    "backend",
+    "dsl",
+    "intent",
+    "api",
+    "postgresql",
+    "framework"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
+    "dotenv": "^17.3.1",
+    "fastify": "^5.0.0",
+    "jsonwebtoken": "^9.0.0",
+    "pg": "^8.12.0"
+  }
+}

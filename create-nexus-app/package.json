@@ -1,0 +1,13 @@
+{
+  "name": "create-nexus-app",
+  "version": "0.1.0",
+  "description": "Scaffolder para projetos Nexus Language",
+  "type": "module",
+  "bin": {
+    "create-nexus-app": "./bin/create-nexus-app.js"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}
