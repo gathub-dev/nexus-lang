@@ -74,7 +74,7 @@ export async function startProduction(nexusFile) {
   console.log(`[nexus] schema válido — ${ast.entities.length} entidades, ${ast.intents.length} intents`)
 
   const db = new Client({
-    connectionString: process.env.DATABASE_URL ?? 'postgres://willian@localhost:5432/nexus'
+    connectionString: process.env.DATABASE_URL ?? 'postgres://localhost:5432/nexus'
   })
   await db.connect()
 

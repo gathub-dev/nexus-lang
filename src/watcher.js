@@ -124,7 +124,7 @@ async function load(nexusFile, db) {
 
 export async function devWatch(nexusFile) {
   const db = new Client({
-    connectionString: process.env.DATABASE_URL ?? 'postgres://willian@localhost:5432/nexus'
+    connectionString: process.env.DATABASE_URL ?? 'postgres://localhost:5432/nexus'
   })
   await db.connect()
 

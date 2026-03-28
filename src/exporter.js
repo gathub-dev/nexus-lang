@@ -76,7 +76,7 @@ export async function generateProjectZip(nexusCode, projectName = 'meu-sistema')
 
     // ── .env (dev defaults) ──
     archive.append(
-      `DATABASE_URL=postgres://postgres:postgres@localhost:5432/${safeName}\nPORT=3000\nNODE_ENV=development\nNEXUS_JWT_SECRET=dev-secret-troque-em-producao\n`,
+      `DATABASE_URL=postgres://localhost:5432/${safeName}\nPORT=3000\nNODE_ENV=development\nNEXUS_JWT_SECRET=dev-secret-troque-em-producao\n`,
       { name: `${safeName}/.env` }
     )
 
@@ -358,7 +358,7 @@ export async function startProduction(nexusFile) {
   console.log('[nexus] schema valido — ' + ast.entities.length + ' entidades, ' + ast.intents.length + ' intents')
 
   const db = new Client({
-    connectionString: process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/nexus'
+    connectionString: process.env.DATABASE_URL ?? 'postgres://localhost:5432/nexus'
   })
   await db.connect()
   await migrate(ast, db, { dryRun: false })

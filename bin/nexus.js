@@ -70,7 +70,7 @@ async function cmdMigrate() {
   const { default: pkg } = await import('pg')
   const { Client } = pkg
   const db = new Client({
-    connectionString: process.env.DATABASE_URL ?? 'postgres://willian@localhost:5432/nexus'
+    connectionString: process.env.DATABASE_URL ?? 'postgres://localhost:5432/nexus'
   })
   await db.connect()
 
